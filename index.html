@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05060f" />
+    <title>Soundwave — Audio Visualizer</title>
+  </head>
+  <body>
+    <canvas id="canvas" aria-label="Audio visualizer canvas"></canvas>
+
+    <!-- Start overlay -->
+    <div id="overlay" class="overlay">
+      <div class="card">
+        <h1>Soundwave</h1>
+        <p class="tagline">Visualize whatever audio is playing on your system.</p>
+        <p class="hint">
+          When you click below, pick <em>any screen, window, or tab</em> to share — your
+          <em>system audio</em> is captured and analyzed live in your browser. Nothing is recorded
+          or sent anywhere. Works best in Chrome or Edge.
+        </p>
+        <button id="startBtn" class="btn primary" type="button">▶ Start listening</button>
+        <p id="overlayError" class="error" role="alert"></p>
+        <p class="shortcuts">
+          Press <kbd>?</kbd> for the full list of keyboard shortcuts.
+        </p>
+      </div>
+    </div>
+
+    <!-- Help overlay -->
+    <div id="helpOverlay" class="overlay overlay--help hidden" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <div class="card help-card">
+        <h2>Keyboard shortcuts</h2>
+        <div class="help-grid">
+          <div class="help-row"><kbd>1–8</kbd><span>Switch visualizer</span></div>
+          <div class="help-row"><kbd>←</kbd><kbd>→</kbd><span>Previous / next visualizer</span></div>
+          <div class="help-row"><kbd>↑</kbd><kbd>↓</kbd><span>Intensity</span></div>
+          <div class="help-row"><kbd>Space</kbd><span>Pause / resume</span></div>
+          <div class="help-row"><kbd>F</kbd><span>Fullscreen</span></div>
+          <div class="help-row"><kbd>H</kbd><span>Hue cycle</span></div>
+          <div class="help-row"><kbd>T</kbd><span>Cycle color theme</span></div>
+          <div class="help-row"><kbd>M</kbd><span>Mirror</span></div>
+          <div class="help-row"><kbd>P</kbd><span>Popout into a separate window</span></div>
+          <div class="help-row"><kbd>R</kbd><span>Randomize settings</span></div>
+          <div class="help-row"><kbd>G</kbd><span>Open scene gallery</span></div>
+          <div class="help-row"><kbd>?</kbd><span>Toggle this help</span></div>
+        </div>
+        <p class="help-note">Use the <b>🔗</b> button to copy a shareable link of your current settings.</p>
+        <button id="helpCloseBtn" class="btn primary" type="button">Got it</button>
+      </div>
+    </div>
+
+    <!-- Scene gallery -->
+    <div id="scenesOverlay" class="overlay overlay--help hidden" role="dialog" aria-modal="true" aria-label="Scene gallery">
+      <div class="card scenes-card">
+        <h2>Scene gallery</h2>
+        <p class="help-note">Pick a preset — visualizer, theme, and sliders snap right into place.</p>
+        <div id="sceneGrid" class="scene-grid"></div>
+        <button id="scenesCloseBtn" class="btn primary" type="button">Close</button>
+      </div>
+    </div>
+
+    <!-- Control bar -->
+    <div id="controls" class="controls">
+      <div class="controls-inner">
+        <div class="group">
+          <span class="label">Visualizer</span>
+          <div id="vizButtons" class="viz-buttons"></div>
+        </div>
+
+        <div class="group sliders">
+          <label class="slider">
+            <span class="slider-head"><span class="label">Intensity</span><output id="intensityVal">50%</output></span>
+            <input id="intensity" type="range" min="0" max="100" value="50" />
+          </label>
+          <label class="slider">
+            <span class="slider-head"><span class="label">Smoothing</span><output id="smoothingVal">60%</output></span>
+            <input id="smoothing" type="range" min="0" max="100" value="60" />
+          </label>
+          <label class="slider">
+            <span class="slider-head"><span class="label">Hue shift</span><output id="hueVal">0°</output></span>
+            <input id="hue" type="range" min="0" max="360" value="0" />
+          </label>
+        </div>
+
+        <div class="group">
+          <span class="label">Theme</span>
+          <div id="themeButtons" class="theme-buttons"></div>
+        </div>
+
+        <div class="group toggles">
+          <button id="cycleBtn" class="btn" type="button" title="Auto-cycle the color hue (H)">Hue cycle</button>
+          <button id="mirrorBtn" class="btn" type="button" title="Mirror the visuals (M)">Mirror</button>
+          <button id="flashBtn" class="btn" type="button" title="Reduce strobe/flash intensity">Safe flash</button>
+        </div>
+
+        <div class="group actions">
+          <span class="label">Actions</span>
+          <div class="action-buttons">
+            <button id="randomizeBtn" class="btn" type="button" title="Randomize everything (R)">🎲 Randomize</button>
+            <button id="scenesBtn" class="btn" type="button" title="Scene gallery (G)">Scenes</button>
+          </div>
+        </div>
+
+        <div class="group">
+          <span id="fps" class="fps">-- fps</span>
+          <button id="helpBtn" class="icon-btn" type="button" title="Keyboard shortcuts (?)">?</button>
+          <button id="pauseBtn" class="icon-btn" type="button" title="Pause (Space)">⏸</button>
+          <button id="fullscreenBtn" class="icon-btn" type="button" title="Fullscreen (F)">⛶</button>
+          <button id="shareBtn" class="icon-btn" type="button" title="Copy share link">🔗</button>
+          <button id="popoutBtn" class="icon-btn" type="button" title="Popout visualizer (P)">⧉</button>
+          <button id="stopBtn" class="icon-btn danger" type="button" title="Stop sharing">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

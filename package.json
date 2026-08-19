@@ -1,0 +1,17 @@
+{
+  "name": "soundwave-visualizer",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Realtime audio visualizer for whatever is playing on your system. Built with Vite + vanilla JS.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}

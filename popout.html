@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05060f" />
+    <title>Soundwave Popout</title>
+    <link rel="stylesheet" href="/src/popout.css" />
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+
+    <div id="hint" class="hint">
+      <div>
+        <p id="hintText">Waiting for audio…</p>
+        <p id="hintSub" class="hint-sub">Start sharing audio in the main Soundwave window, or listen here instead:</p>
+        <button id="startBtn" class="start-btn" type="button">▶ Start listening here</button>
+        <p id="hintError" class="hint-error"></p>
+      </div>
+    </div>
+
+    <div id="bar" class="bar">
+      <span id="name" class="name">Spectrum Bars</span>
+      <button id="prev" class="btn" type="button" title="Previous visualizer">◀</button>
+      <button id="next" class="btn" type="button" title="Next visualizer">▶</button>
+      <input id="intensity" type="range" min="0" max="100" value="50" title="Intensity" />
+      <button id="close" class="btn" type="button" title="Close">✕</button>
+    </div>
+
+    <script type="module" src="/src/popout-app.js"></script>
+  </body>
+</html>

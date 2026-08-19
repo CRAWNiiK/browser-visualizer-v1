@@ -1,0 +1,119 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #05060f;
+  color: #e7ecf5;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+#canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.bar {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(10, 12, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 5;
+}
+
+.name {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8b93a7;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.8rem;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #e7ecf5;
+  cursor: pointer;
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.btn:active {
+  transform: scale(0.94);
+}
+
+.bar input[type="range"] {
+  width: 110px;
+  accent-color: #22d3ee;
+}
+
+.hint {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  color: #8b93a7;
+  font-size: 0.95rem;
+  z-index: 4;
+  pointer-events: none;
+  padding: 20px;
+}
+.hint.hidden {
+  display: none;
+}
+.hint-sub {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+.start-btn {
+  margin-top: 14px;
+  padding: 10px 18px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #04121a;
+  background: linear-gradient(90deg, #22d3ee, #34d399);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.start-btn:hover {
+  filter: brightness(1.08);
+}
+.hint-error {
+  color: #ff6b6b;
+  font-size: 0.8rem;
+  margin-top: 10px;
+  min-height: 1.2em;
+}
