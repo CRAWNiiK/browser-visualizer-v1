@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Realtime audio visualizer for whatever is playing on your system. Built with Vite + vanilla JS.",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",

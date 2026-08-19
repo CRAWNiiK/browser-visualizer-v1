@@ -10,6 +10,13 @@ Browsers can't read the system's audio output directly, so the app captures audi
 window, or tab, its audio becomes a local `MediaStream` that's analyzed with the Web Audio API.
 Nothing is recorded or uploaded — it all stays in your browser. Works best in Chrome/Edge.
 
+## Requirements
+
+- **Node.js 20.19+** or **22.12+** (required by Vite 8). Check your version with `node --version`.
+- **npm** (bundled with Node).
+
+The `engines` field in `package.json` records this, so `npm install` warns you if your Node is too old.
+
 ## Getting started
 
 ```bash
@@ -23,6 +30,32 @@ Or build and preview:
 npm run build
 npm run preview
 ```
+
+## Configuration
+
+There are no config files to edit — most behavior is set in the UI and saved to your browser's
+`localStorage`. A couple of useful command-line options:
+
+- **Port** — Vite picks a port automatically. To force one:
+
+  ```bash
+  npm run dev -- --port 3000
+  ```
+
+- **Access from another device** (e.g. your phone on the same Wi-Fi):
+
+  ```bash
+  npm run dev -- --host
+  ```
+
+## Troubleshooting
+
+- **No audio / visuals stay flat** — capturing system audio only works in **Chrome or Edge**.
+  When the share prompt appears, select the specific tab/window that's playing sound and make sure
+  **"Share tab audio"** is checked. Firefox and Safari don't expose system audio to `getDisplayMedia`.
+- **Popout window doesn't open** — your browser is blocking popups. Allow popups for the site, or
+  trigger it with a click or keypress (which browsers always permit).
+- **Port already in use** — pass a different port (see Configuration above).
 
 ## Features
 
