@@ -1,4 +1,4 @@
-const POPOUT_URL = '/popout.html';
+const POPOUT_URL = './popout.html';
 const POPOUT_FEATURES = 'width=480,height=360,resizable=yes,scrollbars=no';
 
 /**

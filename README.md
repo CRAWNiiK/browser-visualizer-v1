@@ -31,6 +31,21 @@ npm run build
 npm run preview
 ```
 
+## Deploying to GitHub Pages
+
+A GitHub Actions workflow (`.github/workflows/deploy.yml`) runs the test suite, builds the app,
+and deploys it to GitHub Pages on every push to `main`. To enable it once:
+
+1. Push this repo to GitHub with `main` as the default branch.
+2. In the repo's **Settings → Pages**, set **Source** to **GitHub Actions**.
+3. Open the **Actions** tab and wait for the **Deploy to GitHub Pages** workflow to finish.
+4. The deployed site will be at `https://<you>.github.io/<repo>/` (the workflow also links to it
+   from the deployment summary).
+
+The app uses a relative Vite `base`, so it works from the project subpath with no extra config.
+The site must be served over HTTPS for browser screen/audio capture to work; GitHub Pages provides
+that automatically.
+
 ## Configuration
 
 There are no config files to edit — most behavior is set in the UI and saved to your browser's
