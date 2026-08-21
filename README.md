@@ -10,6 +10,46 @@ Browsers can't read the system's audio output directly, so the app captures audi
 window, or tab, its audio becomes a local `MediaStream` that's analyzed with the Web Audio API.
 Nothing is recorded or uploaded — it all stays in your browser. Works best in Chrome/Edge.
 
+## Beat detection algorithm
+
+Beat detection is an onset-detection approach that finds the transient spikes in the music —
+kicks, snares, and other sharp attacks — without any machine learning or beat-tracking library.
+It is implemented in `src/audio-utils.js` (`BeatDetector`) and driven from `src/engine.js`.
+
+**1. Analysis** — The Web Audio API `AnalyserNode` uses an FFT size of 2048 (1024 frequency
+bins). The raw byte frequency data is condensed into 64 bins spaced **logarithmically** across
+20 Hz–20 kHz, matching how human hearing works. The first few bins (roughly 20–200 Hz) are
+summed into a single **bass energy** value in `[0, 1]` each frame, and it's this bass signal that
+the beat detector reads.
+
+**2. Two envelopes** — The detector tracks two smoothed values of the bass energy:
+
+- **Fast envelope (`energy`)** — attacks quickly (coefficient `0.3`) but releases slowly
+  (`0.04`), so it snaps up on transients and then falls off gradually.
+- **Slow envelope (`avg`)** — updates slowly (`0.02`) and represents the long-term loudness of
+  the track.
+
+**3. Onset condition** — A beat fires when the fast envelope rises above the slow one by a fixed
+ratio:
+
+```text
+energy > avg × 1.3   AND   energy > 0.04   AND   time since last beat ≥ 0.18 s
+```
+
+- The `1.3` ratio (threshold) means only a clear spike above the running average counts as a beat.
+- The `0.04` baseline ignores near-silence.
+- The `0.18 s` cooldown (min interval) prevents a single loud hit from double-firing and roughly
+  bounds detection to ~333 BPM.
+
+**4. Why it self-corrects** — Because the slow average keeps rising during a sustained loud
+passage, a constant synth pad or continuous noise eventually stops producing beats. Detection
+only responds to genuine *changes* in energy, not absolute loudness.
+
+**5. Visual payoff** — When a beat fires, `engine.js` sets a `beatEnergy` value of `1`, which
+decays exponentially each frame. The visualizers read that value to trigger shockwave rings,
+particle bursts, a subtle full-screen flash, and other one-shot effects, so the visuals pulse in
+sync with the music's rhythm.
+
 ## Requirements
 
 - **Node.js 20.19+** or **22.12+** (required by Vite 8). Check your version with `node --version`.
