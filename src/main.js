@@ -124,6 +124,24 @@ function toggleFullscreen() {
 }
 $('fullscreenBtn').addEventListener('click', toggleFullscreen);
 
+// ---------- Collapsible settings menu ----------
+const controlsEl = $('controls');
+const controlsTab = $('controlsTab');
+
+function setControlsCollapsed(collapsed) {
+  controlsEl.classList.toggle('collapsed', collapsed);
+  controlsTab.classList.toggle('show', collapsed);
+  $('collapseBtn').textContent = collapsed ? '⌃' : '⌄';
+  $('collapseBtn').title = collapsed ? 'Show the settings menu (C)' : 'Hide the settings menu (C)';
+}
+
+function toggleControls() {
+  setControlsCollapsed(!controlsEl.classList.contains('collapsed'));
+}
+
+$('collapseBtn').addEventListener('click', toggleControls);
+controlsTab.addEventListener('click', toggleControls);
+
 // ---------- Toast ----------
 const toast = $('toast');
 let toastTimer = null;
@@ -439,6 +457,8 @@ window.addEventListener('keydown', (e) => {
     randomize();
   } else if (e.key === 'g' || e.key === 'G') {
     openScenes();
+  } else if (e.key === 'c' || e.key === 'C') {
+    toggleControls();
   } else if (e.key === '?' || e.key === '/') {
     toggleHelp();
   } else if (e.key === 'Escape') {

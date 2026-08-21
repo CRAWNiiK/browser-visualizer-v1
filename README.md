@@ -86,7 +86,7 @@ There are no config files to edit — most behavior is set in the UI and saved t
 - **Pause** (`Space`), **fullscreen** (`F`), and a live **FPS** readout
 - **Keyboard shortcuts** — `1`–`8` pick a visualizer, `←`/`→` cycle, `↑`/`↓` intensity,
   `H` hue cycle, `T` cycle theme, `M` mirror, `P` popout, `R` randomize, `G` scene gallery,
-  `?` opens the help overlay
+  `C` hide/show the settings menu, `?` opens the help overlay
 - **Shareable links** — the address bar always reflects your settings; hit the **🔗** button
   (or copy the URL) to share a link that restores the exact same visualizer, theme, and sliders
 - **Remembered settings** — your last setup is saved to `localStorage` and restored on reload

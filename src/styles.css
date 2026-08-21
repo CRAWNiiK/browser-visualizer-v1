@@ -144,6 +144,12 @@ body {
   display: flex;
   justify-content: center;
   pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.3s ease;
+}
+.controls.collapsed {
+  opacity: 0;
+  transform: translateY(calc(100% + 40px));
+  pointer-events: none;
 }
 .controls-inner {
   pointer-events: auto;
@@ -159,6 +165,36 @@ body {
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+
+/* Small tag that sits at the bottom while the menu is hidden. */
+.controls-tab {
+  position: fixed;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 6;
+  padding: 7px 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.3s ease, background 0.15s ease;
+}
+.controls-tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+.controls-tab.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0);
 }
 
 .group {
