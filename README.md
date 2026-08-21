@@ -114,8 +114,8 @@ There are no config files to edit — most behavior is set in the UI and saved t
 
 ## Features
 
-- **8 visualizers** — Spectrum Bars, Radial Rings, Waveform, Particles, Orb, Shockwave,
-  3D Tunnel, Starfield (switch with the picker or keys `1`–`8`)
+- **10 visualizers** — Spectrum Bars, Radial Rings, Waveform, Particles, Orb, Shockwave,
+  3D Tunnel, Starfield, Triangle Tunnel, Smoke (switch with the picker or keys `1`–`9`, `0`)
 - **Intensity slider** — scales how strongly the visuals react (keys `↑`/`↓`)
 - **Smoothing slider** — tune the analyser's response time
 - **Hue shift slider** + **Hue cycle** toggle for auto-cycling colors (`H`)
@@ -124,7 +124,7 @@ There are no config files to edit — most behavior is set in the UI and saved t
 - **Beat detection** — shockwave rings, particle bursts, and flash pulses on the beat
 - **Safe flash** toggle to reduce strobe intensity
 - **Pause** (`Space`), **fullscreen** (`F`), and a live **FPS** readout
-- **Keyboard shortcuts** — `1`–`8` pick a visualizer, `←`/`→` cycle, `↑`/`↓` intensity,
+- **Keyboard shortcuts** — `1`–`9`, `0` pick a visualizer, `←`/`→` cycle, `↑`/`↓` intensity,
   `H` hue cycle, `T` cycle theme, `M` mirror, `P` popout, `R` randomize, `G` scene gallery,
   `C` hide/show the settings menu, `?` opens the help overlay
 - **Shareable links** — the address bar always reflects your settings; hit the **🔗** button

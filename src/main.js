@@ -430,8 +430,10 @@ setInterval(() => {
 window.addEventListener('keydown', (e) => {
   if (e.target && e.target.matches && e.target.matches('input, textarea')) return;
 
-  if (e.key >= '1' && e.key <= '8') {
+  if (e.key >= '1' && e.key <= '9') {
     selectVisualizer(Number(e.key) - 1);
+  } else if (e.key === '0') {
+    selectVisualizer(9);
   } else if (e.key === 'ArrowLeft') {
     cycleVisualizer(-1);
   } else if (e.key === 'ArrowRight') {

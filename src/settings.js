@@ -24,7 +24,7 @@ const CODES = {
 };
 
 const LIMITS = {
-  visualizer: [0, 7],
+  visualizer: [0, 9],
   intensity: [0, 100],
   smoothing: [0, 100],
   hue: [0, 360],

@@ -12,7 +12,7 @@ describe('scenes', () => {
     for (const scene of SCENES) {
       const s = normalize(scene);
       expect(s.visualizer).toBeGreaterThanOrEqual(0);
-      expect(s.visualizer).toBeLessThan(8);
+      expect(s.visualizer).toBeLessThan(10);
       expect(s.theme).toBeGreaterThanOrEqual(0);
       expect(s.theme).toBeLessThan(6);
       expect(s.intensity).toBeGreaterThanOrEqual(0);
