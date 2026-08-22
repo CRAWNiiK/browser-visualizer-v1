@@ -1,121 +1,101 @@
 import { hs } from '../palette.js';
 
-// A triangular twist on the 3D Tunnel: a rotating wireframe of triangles that
-// flies toward the camera, with a smaller offset triangle nested inside each
-// ring for extra "geometry inside" depth. Neon outlines with additive blending.
+// A Canvas-2D homage to VVavy's "The Triangle": nested neon triangle shells
+// that counter-rotate around a glowing core, folded into a kaleidoscope.
+// Bass swells the core, mids tighten the kaleidoscope (more mirror folds),
+// treble electrifies the outer lattice, and beats fire inward shockwaves.
 export default {
   id: 'triangles',
-  name: 'Triangle Tunnel',
+  name: 'The Triangle',
   create() {
-    const RINGS = 26;
-    const SPACING = 110;
-    // Three corners of an equilateral triangle.
-    const CORNERS = [
-      [0, -1],
-      [Math.sin((2 * Math.PI) / 3), -Math.cos((2 * Math.PI) / 3)],
-      [Math.sin((4 * Math.PI) / 3), -Math.cos((4 * Math.PI) / 3)],
-    ];
-    let zOffset = 0;
-    const rings = [];
+    const SHELLS = 7;
+    const shocks = [];
 
     return {
       init() {
-        zOffset = 0;
-        // Rings begin ahead of the camera (negative z, into the screen).
-        for (let i = 0; i < RINGS; i++) rings[i] = -i * SPACING;
+        shocks.length = 0;
       },
       draw(ctx, s) {
         const cx = s.width / 2;
         const cy = s.height / 2;
-        const focal = Math.max(s.width, s.height) * 1.15;
-        const size = Math.min(s.width, s.height);
+        const R = Math.min(s.width, s.height) * 0.42;
+        const { bass, mid, treble } = s;
 
-        // Travel speed scales with intensity, loudness, and beat spikes.
-        const speed = (420 + s.intensity * 520) * (0.6 + s.level) * (1 + s.beatEnergy * 1.3);
-        zOffset += speed * s.dt;
-
-        const twist = s.t * 0.6;
-        const swayX = Math.cos(s.t * 0.25) * s.width * 0.05;
-        const swayY = Math.sin(s.t * 0.4) * s.height * 0.05;
+        // Mids tighten the kaleidoscope: 3 folds at rest, up to 9 when loud.
+        const folds = 3 + Math.round(mid * 6);
 
         ctx.globalCompositeOperation = 'lighter';
 
-        const frameCache = [];
-
-        for (let i = 0; i < RINGS; i++) {
-          // Recycle rings that pass the camera back to the far end.
-          let z = rings[i] + zOffset;
-          if (z > -20) {
-            rings[i] -= RINGS * SPACING;
-            z = rings[i] + zOffset;
-          }
-          const depth = -z;
-          const scale = focal / (focal + depth);
-          const r = size * 0.52 * scale * (1 + s.bass * 0.3 * s.intensity);
-          const cx0 = cx + swayX * scale;
-          const cy0 = cy + swayY * scale;
-
-          // Each ring rotates and twists as it approaches.
-          const rot = twist + depth * 0.0016;
-          const cos = Math.cos(rot);
-          const sin = Math.sin(rot);
-          const pts = CORNERS.map(([px, py]) => [
-            cx0 + r * (px * cos - py * sin),
-            cy0 + r * (px * sin + py * cos),
-          ]);
-          frameCache.push(pts);
-
-          const t = Math.min(1, depth / (RINGS * SPACING));
-          const col = s.colors[Math.floor((1 - t) * (s.colors.length - 1))];
-
-          // Neon triangle outline, brightening as it nears the camera.
-          ctx.strokeStyle = hs(col, Math.max(0, 1 - t * 0.85));
-          ctx.lineWidth = 1 + scale * 3.5;
-          ctx.beginPath();
-          ctx.moveTo(pts[0][0], pts[0][1]);
-          for (let c = 1; c < pts.length; c++) ctx.lineTo(pts[c][0], pts[c][1]);
-          ctx.closePath();
-          ctx.stroke();
-
-          // Nested, counter-rotating inner triangle for layered geometry.
-          const inner = 0.42 * (0.8 + s.mid * 0.5);
-          const icos = Math.cos(-rot * 1.7);
-          const isin = Math.sin(-rot * 1.7);
-          const ipts = CORNERS.map(([px, py]) => [
-            cx0 + r * inner * (px * icos - py * isin),
-            cy0 + r * inner * (px * isin + py * icos),
-          ]);
-          ctx.strokeStyle = hs(s.colors[(s.colors.length - 1) - (i % s.colors.length)], Math.max(0, 0.55 - t * 0.5));
-          ctx.lineWidth = 1 + scale * 1.5;
-          ctx.beginPath();
-          ctx.moveTo(ipts[0][0], ipts[0][1]);
-          for (let c = 1; c < ipts.length; c++) ctx.lineTo(ipts[c][0], ipts[c][1]);
-          ctx.closePath();
-          ctx.stroke();
-        }
-
-        // Longitudinal lines connecting consecutive rings into a wireframe mesh.
-        ctx.lineWidth = 1;
-        for (let c = 0; c < CORNERS.length; c++) {
-          ctx.beginPath();
-          for (let i = 0; i < RINGS; i++) {
-            const [x, y] = frameCache[i][c];
-            if (i === 0) ctx.moveTo(x, y);
-            else ctx.lineTo(x, y);
-          }
-          ctx.strokeStyle = hs(s.colors[c % s.colors.length], 0.22);
-          ctx.stroke();
-        }
-
-        // Light at the end of the tunnel, pulsing with the bass/beat.
-        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, size * 0.32);
-        g.addColorStop(0, hs(s.colors[0], 0.4 + s.bass * 0.3 + s.beatEnergy * 0.3));
+        // Glowing core, swelling with bass and beat energy.
+        const coreR = R * (0.1 + bass * 0.24 + s.beatEnergy * 0.08);
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.2);
+        g.addColorStop(0, hs(s.colors[0], 0.55 + bass * 0.35 + s.beatEnergy * 0.3));
         g.addColorStop(1, 'transparent');
         ctx.fillStyle = g;
-        ctx.fillRect(0, 0, s.width, s.height);
+        ctx.fillRect(cx - coreR * 3.2, cy - coreR * 3.2, coreR * 6.4, coreR * 6.4);
+
+        // Collect shockwaves once, drawn in every fold for a kaleidoscope bloom.
+        if (s.beat) {
+          shocks.push({ r: R * 0.25, dir: 1, life: 1 });   // outward bloom from the core
+          shocks.push({ r: R * 1.08, dir: -1, life: 1 });  // inward shockwave from outside
+        }
+
+        for (let f = 0; f < folds; f++) {
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate((f / folds) * Math.PI * 2);
+
+          for (let i = 0; i < SHELLS; i++) {
+            const t = i / (SHELLS - 1);
+            // Alternate rotation direction: counter-rotating shells.
+            const dir = i % 2 === 0 ? 1 : -1;
+            const rot = dir * s.t * (0.45 + i * 0.14) + t * 0.7;
+            // Bass swells the inner shells most.
+            const rr = R * (0.16 + t * 0.84) * (1 + bass * 0.07 * (1 - t));
+            const col = s.colors[i % s.colors.length];
+            // Treble electrifies the outermost lattice.
+            const outer = i === SHELLS - 1;
+            const alpha = Math.min(1, 0.72 - t * 0.3 + (outer ? treble * 0.5 : 0));
+            ctx.strokeStyle = hs(col, alpha);
+            ctx.lineWidth = 1 + (1 - t) * 1.6 + (outer ? treble * 3.5 : 0);
+            trianglePath(ctx, rr, rot);
+            ctx.stroke();
+          }
+
+          // Shockwaves travel as neon triangle outlines.
+          for (let i = shocks.length - 1; i >= 0; i--) {
+            const sh = shocks[i];
+            sh.life -= s.dt * 1.15;
+            sh.r += sh.dir * R * 1.15 * s.dt;
+            if (sh.life <= 0) {
+              shocks.splice(i, 1);
+              continue;
+            }
+            const a = Math.max(0, sh.life) * 0.55;
+            ctx.strokeStyle = hs(s.colors[0], a);
+            ctx.lineWidth = 1 + sh.life * 3;
+            trianglePath(ctx, sh.r, s.t * 1.4);
+            ctx.stroke();
+          }
+
+          ctx.restore();
+        }
 
         ctx.globalCompositeOperation = 'source-over';
       },
     };
   },
 };
+
+// Stroke an equilateral triangle centered at the origin with circumradius r.
+function trianglePath(ctx, r, rot) {
+  ctx.beginPath();
+  for (let k = 0; k < 3; k++) {
+    const a = rot - Math.PI / 2 + (k / 3) * Math.PI * 2;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (k === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}

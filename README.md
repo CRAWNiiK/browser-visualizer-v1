@@ -115,7 +115,7 @@ There are no config files to edit — most behavior is set in the UI and saved t
 ## Features
 
 - **10 visualizers** — Spectrum Bars, Radial Rings, Waveform, Particles, Orb, Shockwave,
-  3D Tunnel, Starfield, Triangle Tunnel, Smoke (switch with the picker or keys `1`–`9`, `0`)
+  3D Tunnel, Starfield, The Triangle, Smoke (switch with the picker or keys `1`–`9`, `0`)
 - **Intensity slider** — scales how strongly the visuals react (keys `↑`/`↓`)
 - **Smoothing slider** — tune the analyser's response time
 - **Hue shift slider** + **Hue cycle** toggle for auto-cycling colors (`H`)

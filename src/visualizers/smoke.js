@@ -1,81 +1,109 @@
 import { hs } from '../palette.js';
 
-// Flowing neon smoke: soft glowing puffs rise from the bottom and swirl as they
-// expand and fade, with additive blending for a luminous, fluid plume. Bass
-// drives the buoyancy and turbulence, and each beat gusts the smoke upward.
+// A Canvas-2D homage to VVavy's "A Smoke" (itself inspired by PavelDoGreat's
+// fluid simulation). A dense field of particles advects through a swirling
+// curl-noise flow field, drawing short segments into a persistent trail buffer.
+// The segments accumulate into flowing, iridescent ribbons whose color follows
+// the direction of motion; bass feeds the plume, treble sharpens the curl, and
+// each beat fires a shockwave that shoves the smoke outward.
 export default {
   id: 'smoke',
   name: 'Smoke',
   create() {
-    const MAX = 240;
-    const puffs = [];
-    let spawnAcc = 0;
+    const COUNT = 1200;
+    let buffer = null;
+    let bctx = null;
+    let particles = [];
+
+    function seed(s) {
+      particles.length = 0;
+      for (let i = 0; i < COUNT; i++) {
+        particles.push({ x: Math.random() * s.width, y: Math.random() * s.height });
+      }
+    }
+
+    function ensureBuffer(s) {
+      const w = Math.max(1, Math.round(s.width));
+      const h = Math.max(1, Math.round(s.height));
+      if (buffer && buffer.width === w && buffer.height === h) return;
+      buffer = document.createElement('canvas');
+      buffer.width = w;
+      buffer.height = h;
+      bctx = buffer.getContext('2d');
+      seed(s);
+    }
 
     return {
       init() {
-        puffs.length = 0;
-        spawnAcc = 0;
+        buffer = null;
+        bctx = null;
+        particles = [];
       },
       draw(ctx, s) {
-        // Emission rate scales with intensity and low-end energy.
-        const rate = (5 + s.intensity * 22) * (0.3 + s.bass * 2.4 + s.level * 0.7);
-        spawnAcc += rate * s.dt;
-        while (spawnAcc >= 1 && puffs.length < MAX) {
-          spawnAcc -= 1;
-          this._spawn(s);
-        }
+        ensureBuffer(s);
 
-        ctx.globalCompositeOperation = 'lighter';
+        // Fade previous trails so fresh ribbons stay bright.
+        bctx.globalCompositeOperation = 'destination-out';
+        bctx.fillStyle = 'rgba(0, 0, 0, 0.04)';
+        bctx.fillRect(0, 0, buffer.width, buffer.height);
+        bctx.globalCompositeOperation = 'lighter';
 
-        for (let i = puffs.length - 1; i >= 0; i--) {
-          const p = puffs[i];
-          const gust = 1 + s.beatEnergy * 3 + s.bass * 2;
+        const t = s.t;
+        const cw = s.width;
+        const ch = s.height;
+        const base = s.colors[0];
 
-          // Swirling turbulence: a smooth sine drift plus a little jitter.
-          p.vx += (Math.sin(s.t * p.swirl + p.phase) * 26 + (Math.random() - 0.5) * 26) * s.dt;
-          p.vx *= Math.pow(0.4, s.dt); // air drag
-          p.vy += (-16 - s.bass * 34 - s.beatEnergy * 60) * s.dt; // buoyancy
-          p.vy *= Math.pow(0.7, s.dt);
-          p.x += p.vx * s.dt;
-          p.y += p.vy * s.dt;
-          p.r += p.growth * s.dt * gust;
-          p.life -= p.decay * s.dt;
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          const x = p.x;
+          const y = p.y;
 
-          if (p.life <= 0 || p.y < -p.r * 2 || p.x < -p.r * 3 || p.x > s.width + p.r * 3) {
-            puffs.splice(i, 1);
-            continue;
+          // Layered sines produce a smooth, swirling curl-noise flow field.
+          const a =
+            Math.sin(x * 0.0016 + t * 0.5) * Math.cos(y * 0.0014 - t * 0.35) * 2.6 +
+            Math.sin((x + y) * 0.0009 + t * 0.2) * 1.4 +
+            Math.sin(y * 0.0022 - t * 0.45) * 1.1;
+          let vx = Math.cos(a);
+          let vy = Math.sin(a);
+
+          // Bass lifts and energizes the plume; treble sharpens the curl.
+          vy -= 0.5 + s.bass * 1.6;
+          vx *= 0.7 + s.treble * 0.8;
+
+          // Beat shockwave: push smoke outward from the center.
+          if (s.beatEnergy > 0.01) {
+            const dx = x - cw / 2;
+            const dy = y - ch / 2;
+            const d = Math.hypot(dx, dy) + 0.001;
+            const f = (s.beatEnergy * 150) / (d * 0.02 + 1);
+            vx += (dx / d) * f;
+            vy += (dy / d) * f;
           }
 
-          const col = s.colors[p.hue];
-          const a = Math.sin(Math.min(1, p.life) * Math.PI) * 0.32;
-          const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
-          g.addColorStop(0, hs(col, a));
-          g.addColorStop(1, 'transparent');
-          ctx.fillStyle = g;
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-          ctx.fill();
+          const speed = (1.2 + s.bass * 2 + s.level * 1.2) * 2.2;
+          const nx = x + vx * speed;
+          const ny = y + vy * speed;
+
+          // Wrap around the field to keep the volume dense.
+          p.x = nx < 0 ? cw + nx : nx > cw ? nx - cw : nx;
+          p.y = ny < 0 ? ch + ny : ny > ch ? ny - ch : ny;
+
+          // Iridescent color: hue sweeps with the direction of motion.
+          const ang = Math.atan2(vy, vx);
+          const hue = (base.h + ((ang + Math.PI) / (Math.PI * 2)) * 180) % 360;
+          const alpha = 0.06 + s.bass * 0.05;
+          bctx.strokeStyle = hs({ h: hue, s: base.s, l: base.l }, alpha);
+          bctx.lineWidth = 1 + s.bass * 0.7;
+          bctx.beginPath();
+          bctx.moveTo(x, y);
+          bctx.lineTo(p.x, p.y);
+          bctx.stroke();
         }
 
+        // Composite the accumulated smoke over the scene.
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.drawImage(buffer, 0, 0);
         ctx.globalCompositeOperation = 'source-over';
-      },
-
-      _spawn(s) {
-        // Smoke emits across the bottom, denser toward the center.
-        const spread = (Math.random() + Math.random() - 1) * 0.5;
-        puffs.push({
-          x: s.width / 2 + spread * s.width,
-          y: s.height + 10 + Math.random() * 30,
-          vx: (Math.random() - 0.5) * 26,
-          vy: -(24 + Math.random() * 70),
-          r: 10 + Math.random() * 26 + s.bass * 26,
-          growth: 16 + Math.random() * 46 + s.intensity * 24,
-          life: 1,
-          decay: 0.12 + Math.random() * 0.22,
-          phase: Math.random() * Math.PI * 2,
-          swirl: 0.6 + Math.random() * 1.4,
-          hue: Math.floor(Math.random() * s.colors.length),
-        });
       },
     };
   },
