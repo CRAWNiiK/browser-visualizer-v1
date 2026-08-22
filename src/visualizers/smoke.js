@@ -5,6 +5,11 @@ import { createProgram, createQuad, createDoubleFBO, hslToRgb, hexToRgb, getUnif
 // vorticity confinement and pressure projection; audio injects dye and upward
 // buoyancy so the smoke swells with the bass and bursts on each beat. The final
 // pass colors the flow by its direction for the iridescent-ribbon look.
+//
+// All simulation textures use plain RGBA8 (UNSIGNED_BYTE) so the effect works
+// on every WebGL2 device, including software renderers that reject float
+// render targets. Signed values (velocity, curl, divergence, pressure) are
+// packed into the 0..1 range with a fixed scale, decoded again in each pass.
 
 const VERT = `#version 300 es
 layout(location = 0) in vec2 aPosition;
@@ -14,138 +19,151 @@ void main() {
   gl_Position = vec4(aPosition, 0.0, 1.0);
 }`;
 
-const SPLAT = `#version 300 es
+// Shared packing helpers prepended to every fragment shader.
+const PREAMBLE = `#version 300 es
 precision highp float;
+uniform float uVelMax;
+uniform float uScalarMax;
+vec2 decodeVel(vec4 c) { return (c.xy * 2.0 - 1.0) * uVelMax; }
+vec4 encodeVel(vec2 v) { return vec4(v / uVelMax * 0.5 + 0.5, 0.0, 1.0); }
+float decodeScalar(vec4 c) { return (c.x * 2.0 - 1.0) * uScalarMax; }
+vec4 encodeScalar(float x) { return vec4(x / uScalarMax * 0.5 + 0.5, 0.0, 0.0, 1.0); }
+`;
+
+const frag = (body) => `${PREAMBLE}in vec2 vUv;\nout vec4 outColor;\n${body}`;
+
+const SPLAT_VEL = frag(`
+uniform sampler2D uTexture;
+uniform vec2 uPoint;
+uniform float uRadius;
+uniform vec2 uValue;
+uniform vec2 uRes;
+void main() {
+  vec2 d = vUv * uRes - uPoint;
+  float falloff = exp(-dot(d, d) / (uRadius * uRadius));
+  vec2 v = decodeVel(texture(uTexture, vUv)) + uValue * falloff;
+  outColor = encodeVel(v);
+}`);
+
+const SPLAT_DYE = frag(`
 uniform sampler2D uTexture;
 uniform vec2 uPoint;
 uniform float uRadius;
 uniform vec4 uValue;
 uniform vec2 uRes;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
   vec2 d = vUv * uRes - uPoint;
   float falloff = exp(-dot(d, d) / (uRadius * uRadius));
   outColor = texture(uTexture, vUv) + uValue * falloff;
-}`;
+}`);
 
-const CURL = `#version 300 es
-precision highp float;
+const CURL = frag(`
 uniform sampler2D uVelocity;
 uniform vec2 uTexel;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
-  float L = texture(uVelocity, vUv - vec2(uTexel.x, 0.0)).y;
-  float R = texture(uVelocity, vUv + vec2(uTexel.x, 0.0)).y;
-  float B = texture(uVelocity, vUv - vec2(0.0, uTexel.y)).x;
-  float T = texture(uVelocity, vUv + vec2(0.0, uTexel.y)).x;
-  outColor = vec4((R - L) - (T - B), 0.0, 0.0, 1.0);
-}`;
+  float L = decodeVel(texture(uVelocity, vUv - vec2(uTexel.x, 0.0))).y;
+  float R = decodeVel(texture(uVelocity, vUv + vec2(uTexel.x, 0.0))).y;
+  float B = decodeVel(texture(uVelocity, vUv - vec2(0.0, uTexel.y))).x;
+  float T = decodeVel(texture(uVelocity, vUv + vec2(0.0, uTexel.y))).x;
+  outColor = encodeScalar((R - L) - (T - B));
+}`);
 
-const VORTICITY = `#version 300 es
-precision highp float;
+const VORTICITY = frag(`
 uniform sampler2D uVelocity;
 uniform sampler2D uCurl;
 uniform float uCurlStrength;
 uniform float uDt;
 uniform vec2 uTexel;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
-  float L = texture(uCurl, vUv - vec2(uTexel.x, 0.0)).x;
-  float R = texture(uCurl, vUv + vec2(uTexel.x, 0.0)).x;
-  float B = texture(uCurl, vUv - vec2(0.0, uTexel.y)).x;
-  float T = texture(uCurl, vUv + vec2(0.0, uTexel.y)).x;
-  float C = texture(uCurl, vUv).x;
+  float L = decodeScalar(texture(uCurl, vUv - vec2(uTexel.x, 0.0)));
+  float R = decodeScalar(texture(uCurl, vUv + vec2(uTexel.x, 0.0)));
+  float B = decodeScalar(texture(uCurl, vUv - vec2(0.0, uTexel.y)));
+  float T = decodeScalar(texture(uCurl, vUv + vec2(0.0, uTexel.y)));
+  float C = decodeScalar(texture(uCurl, vUv));
   vec2 force = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L));
   force /= length(force) + 0.0001;
   force *= uCurlStrength * C;
   force.y *= -1.0;
-  vec2 vel = texture(uVelocity, vUv).xy;
-  outColor = vec4(vel + force * uDt, 0.0, 1.0);
-}`;
+  vec2 vel = decodeVel(texture(uVelocity, vUv)) + force * uDt;
+  outColor = encodeVel(vel);
+}`);
 
-const DIVERGENCE = `#version 300 es
-precision highp float;
+const DIVERGENCE = frag(`
 uniform sampler2D uVelocity;
 uniform vec2 uTexel;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
-  float L = texture(uVelocity, vUv - vec2(uTexel.x, 0.0)).x;
-  float R = texture(uVelocity, vUv + vec2(uTexel.x, 0.0)).x;
-  float T = texture(uVelocity, vUv + vec2(0.0, uTexel.y)).y;
-  float B = texture(uVelocity, vUv - vec2(0.0, uTexel.y)).y;
-  outColor = vec4(0.5 * (R - L + T - B), 0.0, 0.0, 1.0);
-}`;
+  float L = decodeVel(texture(uVelocity, vUv - vec2(uTexel.x, 0.0))).x;
+  float R = decodeVel(texture(uVelocity, vUv + vec2(uTexel.x, 0.0))).x;
+  float T = decodeVel(texture(uVelocity, vUv + vec2(0.0, uTexel.y))).y;
+  float B = decodeVel(texture(uVelocity, vUv - vec2(0.0, uTexel.y))).y;
+  outColor = encodeScalar(0.5 * (R - L + T - B));
+}`);
 
-const PRESSURE = `#version 300 es
-precision highp float;
+const PRESSURE = frag(`
 uniform sampler2D uPressure;
 uniform sampler2D uDivergence;
 uniform vec2 uTexel;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
-  float L = texture(uPressure, vUv - vec2(uTexel.x, 0.0)).x;
-  float R = texture(uPressure, vUv + vec2(uTexel.x, 0.0)).x;
-  float T = texture(uPressure, vUv + vec2(0.0, uTexel.y)).x;
-  float B = texture(uPressure, vUv - vec2(0.0, uTexel.y)).x;
-  float C = texture(uDivergence, vUv).x;
-  outColor = vec4((L + R + T + B - C) * 0.25, 0.0, 0.0, 1.0);
-}`;
+  float L = decodeScalar(texture(uPressure, vUv - vec2(uTexel.x, 0.0)));
+  float R = decodeScalar(texture(uPressure, vUv + vec2(uTexel.x, 0.0)));
+  float T = decodeScalar(texture(uPressure, vUv + vec2(0.0, uTexel.y)));
+  float B = decodeScalar(texture(uPressure, vUv - vec2(0.0, uTexel.y)));
+  float C = decodeScalar(texture(uDivergence, vUv));
+  outColor = encodeScalar((L + R + T + B - C) * 0.25);
+}`);
 
-const GRADIENT = `#version 300 es
-precision highp float;
+const GRADIENT = frag(`
 uniform sampler2D uPressure;
 uniform sampler2D uVelocity;
 uniform vec2 uTexel;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
-  float L = texture(uPressure, vUv - vec2(uTexel.x, 0.0)).x;
-  float R = texture(uPressure, vUv + vec2(uTexel.x, 0.0)).x;
-  float T = texture(uPressure, vUv + vec2(0.0, uTexel.y)).x;
-  float B = texture(uPressure, vUv - vec2(0.0, uTexel.y)).x;
-  vec2 vel = texture(uVelocity, vUv).xy;
+  float L = decodeScalar(texture(uPressure, vUv - vec2(uTexel.x, 0.0)));
+  float R = decodeScalar(texture(uPressure, vUv + vec2(uTexel.x, 0.0)));
+  float T = decodeScalar(texture(uPressure, vUv + vec2(0.0, uTexel.y)));
+  float B = decodeScalar(texture(uPressure, vUv - vec2(0.0, uTexel.y)));
+  vec2 vel = decodeVel(texture(uVelocity, vUv));
   vel -= 0.5 * vec2(R - L, T - B);
-  outColor = vec4(vel, 0.0, 1.0);
-}`;
+  outColor = encodeVel(vel);
+}`);
 
-const ADVECT = `#version 300 es
-precision highp float;
+const ADVECT_VEL = frag(`
 uniform sampler2D uVelocity;
 uniform sampler2D uSource;
 uniform float uDt;
 uniform float uDissipation;
 uniform vec2 uTexel;
-in vec2 vUv;
-out vec4 outColor;
 void main() {
-  vec2 coord = vUv - uDt * texture(uVelocity, vUv).xy * uTexel;
+  vec2 coord = vUv - uDt * decodeVel(texture(uVelocity, vUv)) * uTexel;
+  vec4 result = texture(uSource, coord);
+  vec2 vel = decodeVel(result) / (1.0 + uDissipation * uDt);
+  outColor = encodeVel(vel);
+}`);
+
+const ADVECT_DYE = frag(`
+uniform sampler2D uVelocity;
+uniform sampler2D uSource;
+uniform float uDt;
+uniform float uDissipation;
+uniform vec2 uTexel;
+void main() {
+  vec2 coord = vUv - uDt * decodeVel(texture(uVelocity, vUv)) * uTexel;
   vec4 result = texture(uSource, coord);
   outColor = result / (1.0 + uDissipation * uDt);
-}`;
+}`);
 
-const DISPLAY = `#version 300 es
-precision highp float;
+const DISPLAY = frag(`
 uniform sampler2D uDye;
 uniform sampler2D uVelocity;
 uniform float uTime;
 uniform vec3 uBackground;
-in vec2 vUv;
-out vec4 outColor;
-
 vec3 hsv2rgb(vec3 c) {
   vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
   vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
   return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
 }
-
 void main() {
   vec3 dye = texture(uDye, vUv).rgb;
-  vec2 vel = texture(uVelocity, vUv).xy;
+  vec2 vel = decodeVel(texture(uVelocity, vUv));
   float speed = clamp(length(vel) / 60.0, 0.0, 1.0);
   float ang = atan(vel.y, vel.x);
   float hue = ang / 6.2831853 + 0.5 + uTime * 0.02;
@@ -155,7 +173,7 @@ void main() {
   vec2 uv = vUv - 0.5;
   col *= 1.0 - 0.22 * dot(uv, uv);
   outColor = vec4(uBackground + col, 1.0);
-}`;
+}`);
 
 const SIM_RES = 128;
 const DYE_RES = 256;
@@ -164,6 +182,8 @@ const VELOCITY_DISSIPATION = 0.2;
 const PRESSURE_ITERATIONS = 20;
 const CURL_STRENGTH = 30;
 const VELOCITY_SCALE = 70; // texels/second
+const VEL_MAX = 800; // packed velocity range
+const SCALAR_MAX = 500; // packed curl/divergence/pressure range
 
 export default {
   id: 'smoke',
@@ -190,17 +210,31 @@ export default {
       target.swap();
     }
 
-    function splat(target, program, nx, ny, value, radius) {
+    function splatVel(target, nx, ny, vel, radius) {
       const x = nx * target.width;
       const y = ny * target.height;
-      step(target, program, () => {
+      step(target, programs.splatVel, () => {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, target.read.texture);
-        gl.uniform1i(program.u.uTexture, 0);
-        gl.uniform2f(program.u.uPoint, x, y);
-        gl.uniform1f(program.u.uRadius, radius);
-        gl.uniform4f(program.u.uValue, value[0], value[1], value[2], value[3]);
-        gl.uniform2f(program.u.uRes, target.width, target.height);
+        gl.uniform1i(programs.splatVel.u.uTexture, 0);
+        gl.uniform2f(programs.splatVel.u.uPoint, x, y);
+        gl.uniform1f(programs.splatVel.u.uRadius, radius);
+        gl.uniform2f(programs.splatVel.u.uValue, vel[0], vel[1]);
+        gl.uniform2f(programs.splatVel.u.uRes, target.width, target.height);
+      });
+    }
+
+    function splatDye(target, nx, ny, color, radius) {
+      const x = nx * target.width;
+      const y = ny * target.height;
+      step(target, programs.splatDye, () => {
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, target.read.texture);
+        gl.uniform1i(programs.splatDye.u.uTexture, 0);
+        gl.uniform2f(programs.splatDye.u.uPoint, x, y);
+        gl.uniform1f(programs.splatDye.u.uRadius, radius);
+        gl.uniform4f(programs.splatDye.u.uValue, color[0], color[1], color[2], 0);
+        gl.uniform2f(programs.splatDye.u.uRes, target.width, target.height);
       });
     }
 
@@ -213,39 +247,46 @@ export default {
       quad = createQuad(gl);
 
       programs = {
-        splat: createProgram(gl, VERT, SPLAT),
+        splatVel: createProgram(gl, VERT, SPLAT_VEL),
+        splatDye: createProgram(gl, VERT, SPLAT_DYE),
         curl: createProgram(gl, VERT, CURL),
         vorticity: createProgram(gl, VERT, VORTICITY),
         divergence: createProgram(gl, VERT, DIVERGENCE),
         pressure: createProgram(gl, VERT, PRESSURE),
         gradient: createProgram(gl, VERT, GRADIENT),
-        advect: createProgram(gl, VERT, ADVECT),
+        advectVel: createProgram(gl, VERT, ADVECT_VEL),
+        advectDye: createProgram(gl, VERT, ADVECT_DYE),
         display: createProgram(gl, VERT, DISPLAY),
       };
 
-      const RGBA16F = gl.RGBA16F;
-      const HALF = gl.HALF_FLOAT;
-
-      velocity = createDoubleFBO(gl, SIM_RES, SIM_RES, RGBA16F, gl.RGBA, HALF, gl.LINEAR);
-      dye = createDoubleFBO(gl, DYE_RES, DYE_RES, RGBA16F, gl.RGBA, HALF, gl.LINEAR);
-      pressure = createDoubleFBO(gl, SIM_RES, SIM_RES, RGBA16F, gl.RGBA, HALF, gl.NEAREST);
-      divergence = createDoubleFBO(gl, SIM_RES, SIM_RES, RGBA16F, gl.RGBA, HALF, gl.NEAREST);
-      curl = createDoubleFBO(gl, SIM_RES, SIM_RES, RGBA16F, gl.RGBA, HALF, gl.NEAREST);
+      velocity = createDoubleFBO(gl, SIM_RES, SIM_RES, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+      dye = createDoubleFBO(gl, DYE_RES, DYE_RES, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.LINEAR);
+      pressure = createDoubleFBO(gl, SIM_RES, SIM_RES, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+      divergence = createDoubleFBO(gl, SIM_RES, SIM_RES, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
+      curl = createDoubleFBO(gl, SIM_RES, SIM_RES, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
 
       const UNIFORMS = {
-        splat: ['uTexture', 'uPoint', 'uRadius', 'uValue', 'uRes'],
+        splatVel: ['uTexture', 'uPoint', 'uRadius', 'uValue', 'uRes'],
+        splatDye: ['uTexture', 'uPoint', 'uRadius', 'uValue', 'uRes'],
         curl: ['uVelocity', 'uTexel'],
         vorticity: ['uVelocity', 'uCurl', 'uCurlStrength', 'uDt', 'uTexel'],
         divergence: ['uVelocity', 'uTexel'],
         pressure: ['uPressure', 'uDivergence', 'uTexel'],
         gradient: ['uPressure', 'uVelocity', 'uTexel'],
-        advect: ['uVelocity', 'uSource', 'uDt', 'uDissipation', 'uTexel'],
+        advectVel: ['uVelocity', 'uSource', 'uDt', 'uDissipation', 'uTexel'],
+        advectDye: ['uVelocity', 'uSource', 'uDt', 'uDissipation', 'uTexel'],
         display: ['uDye', 'uVelocity', 'uTime', 'uBackground'],
       };
       for (const name of Object.keys(programs)) {
         const locs = {};
-        for (const u of UNIFORMS[name]) locs[u] = getUniform(gl, programs[name], u);
+        for (const n of UNIFORMS[name]) locs[n] = getUniform(gl, programs[name], n);
         programs[name].u = locs;
+        // Constant packing scales, set once per program.
+        gl.useProgram(programs[name]);
+        const velMax = gl.getUniformLocation(programs[name], 'uVelMax');
+        if (velMax) gl.uniform1f(velMax, VEL_MAX);
+        const scalarMax = gl.getUniformLocation(programs[name], 'uScalarMax');
+        if (scalarMax) gl.uniform1f(scalarMax, SCALAR_MAX);
       }
       ready = true;
     }
@@ -267,8 +308,8 @@ export default {
           const dx = Math.sin(s.t * 0.6 + i * 2.1) * 0.5 * velScale * amount;
           const dy = -(0.5 + bass * 1.6) * velScale * amount;
           const [r, g, b] = hslToRgb(hue + i * 14, 80, 70);
-          splat(dye, programs.splat, fx, fy, [r * dyeScale, g * dyeScale, b * dyeScale, 0], DYE_RES * 0.08);
-          splat(velocity, programs.splat, fx, fy, [dx, dy, 0, 0], SIM_RES * 0.06);
+          splatDye(dye, fx, fy, [r * dyeScale, g * dyeScale, b * dyeScale], DYE_RES * 0.08);
+          splatVel(velocity, fx, fy, [dx, dy], SIM_RES * 0.06);
         }
       }
 
@@ -276,20 +317,19 @@ export default {
       if (s.beat) {
         const ring = 16;
         const r0 = 0.16;
-        const sp = velScale * 5;
+        const sp = velScale * 4;
         for (let i = 0; i < ring; i++) {
           const a = (i / ring) * Math.PI * 2;
-          splat(
+          splatVel(
             velocity,
-            programs.splat,
             0.5 + Math.cos(a) * r0,
             0.5 + Math.sin(a) * r0,
-            [Math.cos(a) * sp, Math.sin(a) * sp, 0, 0],
+            [Math.cos(a) * sp, Math.sin(a) * sp],
             SIM_RES * 0.05,
           );
         }
         const [r, g, b] = hslToRgb(hue + 40, 100, 70);
-        splat(dye, programs.splat, 0.5, 0.5, [r * 0.6, g * 0.6, b * 0.6, 0], DYE_RES * 0.14);
+        splatDye(dye, 0.5, 0.5, [r * 0.6, g * 0.6, b * 0.6], DYE_RES * 0.14);
       }
     }
 
@@ -350,29 +390,29 @@ export default {
         gl.uniform2f(programs.gradient.u.uTexel, vt[0], vt[1]);
       });
 
-      step(velocity, programs.advect, () => {
+      step(velocity, programs.advectVel, () => {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, velocity.read.texture);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, velocity.read.texture);
-        gl.uniform1i(programs.advect.u.uVelocity, 0);
-        gl.uniform1i(programs.advect.u.uSource, 1);
-        gl.uniform1f(programs.advect.u.uDt, dt);
-        gl.uniform1f(programs.advect.u.uDissipation, VELOCITY_DISSIPATION);
-        gl.uniform2f(programs.advect.u.uTexel, vt[0], vt[1]);
+        gl.uniform1i(programs.advectVel.u.uVelocity, 0);
+        gl.uniform1i(programs.advectVel.u.uSource, 1);
+        gl.uniform1f(programs.advectVel.u.uDt, dt);
+        gl.uniform1f(programs.advectVel.u.uDissipation, VELOCITY_DISSIPATION);
+        gl.uniform2f(programs.advectVel.u.uTexel, vt[0], vt[1]);
       });
 
       const dtk = [1 / dye.width, 1 / dye.height];
-      step(dye, programs.advect, () => {
+      step(dye, programs.advectDye, () => {
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, velocity.read.texture);
         gl.activeTexture(gl.TEXTURE1);
         gl.bindTexture(gl.TEXTURE_2D, dye.read.texture);
-        gl.uniform1i(programs.advect.u.uVelocity, 0);
-        gl.uniform1i(programs.advect.u.uSource, 1);
-        gl.uniform1f(programs.advect.u.uDt, dt);
-        gl.uniform1f(programs.advect.u.uDissipation, DENSITY_DISSIPATION);
-        gl.uniform2f(programs.advect.u.uTexel, dtk[0], dtk[1]);
+        gl.uniform1i(programs.advectDye.u.uVelocity, 0);
+        gl.uniform1i(programs.advectDye.u.uSource, 1);
+        gl.uniform1f(programs.advectDye.u.uDt, dt);
+        gl.uniform1f(programs.advectDye.u.uDissipation, DENSITY_DISSIPATION);
+        gl.uniform2f(programs.advectDye.u.uTexel, dtk[0], dtk[1]);
       });
 
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -391,6 +431,6 @@ export default {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    return { init, draw };
+    return { webgl: true, init, draw };
   },
 };

@@ -153,6 +153,6 @@ export default {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
 
-    return { init, draw };
+    return { webgl: true, init, draw };
   },
 };
