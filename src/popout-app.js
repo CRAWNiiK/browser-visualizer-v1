@@ -13,7 +13,7 @@ const startBtn = document.getElementById('startBtn');
 const nameEl = document.getElementById('name');
 const intensity = document.getElementById('intensity');
 
-const engine = new Engine(canvas);
+const engine = new Engine(canvas, document.getElementById('glcanvas'));
 engine.start();
 
 let vizIndex = 0;

@@ -1,7 +1,7 @@
 # Soundwave — Audio Visualizer
 
 A realtime audio visualizer that reacts to **whatever audio is playing on your system**.
-Built with Vite + vanilla JS and the Canvas API. No dependencies beyond the build tooling.
+Built with Vite + vanilla JS, the Canvas 2D API, and WebGL2. No dependencies beyond the build tooling.
 
 ## How it works
 
@@ -115,7 +115,9 @@ There are no config files to edit — most behavior is set in the UI and saved t
 ## Features
 
 - **10 visualizers** — Spectrum Bars, Radial Rings, Waveform, Particles, Orb, Shockwave,
-  3D Tunnel, Starfield, The Triangle, Smoke (switch with the picker or keys `1`–`9`, `0`)
+  3D Tunnel, Starfield, The Triangle, Smoke (switch with the picker or keys `1`–`9`, `0`).
+  **The Triangle** and **Smoke** render on the GPU via WebGL2 (a kaleidoscope shader and a
+  fluid simulation, respectively); the other eight use Canvas 2D.
 - **Intensity slider** — scales how strongly the visuals react (keys `↑`/`↓`)
 - **Smoothing slider** — tune the analyser's response time
 - **Hue shift slider** + **Hue cycle** toggle for auto-cycling colors (`H`)

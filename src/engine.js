@@ -10,9 +10,13 @@ export const BIN_COUNT = 64;
  * the audio data, timing, and user settings.
  */
 export class Engine {
-  constructor(canvas) {
+  constructor(canvas, glCanvas = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
+    this.glCanvas = glCanvas;
+    this.gl = null;
+    this.isWebGL = false;
+    if (this.glCanvas) this._initGL();
     this.analyser = null;
     this.freqData = null;
     this.waveData = null;
@@ -116,16 +120,40 @@ export class Engine {
 
   setVisualizer(create) {
     this.viz = create();
-    if (this.viz && typeof this.viz.init === 'function') this.viz.init(this.state);
+    this.isWebGL = !!(this.viz && this.viz.webgl);
+    if (this.viz && typeof this.viz.init === 'function') {
+      try {
+        this.viz.init(this.isWebGL ? this.gl : this.state, this.state);
+      } catch (err) {
+        // A shader compile error must never take down the whole app.
+        console.error('Visualizer init failed:', err);
+      }
+    }
+    this._syncCanvasVisibility();
+  }
+
+  _initGL() {
+    this.gl = this.glCanvas.getContext('webgl2', { alpha: false, antialias: true });
+  }
+
+  _syncCanvasVisibility() {
+    const useGL = this.isWebGL && !!this.gl;
+    if (this.glCanvas) this.glCanvas.style.display = useGL ? 'block' : 'none';
+    if (this.canvas) this.canvas.style.display = useGL ? 'none' : 'block';
   }
 
   _resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = this.canvas.clientWidth || window.innerWidth;
-    const h = this.canvas.clientHeight || window.innerHeight;
+    const el = this.isWebGL && this.glCanvas ? this.glCanvas : this.canvas;
+    const w = el.clientWidth || window.innerWidth;
+    const h = el.clientHeight || window.innerHeight;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (this.glCanvas) {
+      this.glCanvas.width = Math.round(w * dpr);
+      this.glCanvas.height = Math.round(h * dpr);
+    }
     Object.assign(this.state, { width: w, height: h, dpr });
   }
 
@@ -222,11 +250,21 @@ export class Engine {
     const s = this.state;
     const { ctx } = this;
 
-    ctx.fillStyle = s.theme.background;
-    ctx.fillRect(0, 0, s.width, s.height);
-
     const hue = s.hueCycle ? s.hue : s.hueShift;
     s.colors = themeColors(s.theme, hue);
+
+    if (this.isWebGL) {
+      if (this.gl) {
+        this.viz.draw(this.gl, s);
+      } else {
+        ctx.fillStyle = s.theme.background;
+        ctx.fillRect(0, 0, s.width, s.height);
+      }
+      return;
+    }
+
+    ctx.fillStyle = s.theme.background;
+    ctx.fillRect(0, 0, s.width, s.height);
 
     if (this.viz) {
       const drawViz = () => this.viz.draw(ctx, s);

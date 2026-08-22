@@ -9,7 +9,7 @@ import { initPopout } from './popout.js';
 
 const $ = (id) => document.getElementById(id);
 
-const engine = new Engine($('canvas'));
+const engine = new Engine($('canvas'), $('glcanvas'));
 engine.start();
 
 let current = null; // { stream, audioCtx, analyser }
