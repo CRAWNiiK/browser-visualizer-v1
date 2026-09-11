@@ -2,7 +2,7 @@ import { Engine } from './engine.js';
 import { VISUALIZERS } from './visualizers/index.js';
 import { THEMES } from './palette.js';
 import { normalize } from './settings.js';
-import { startCapture, createAnalyser } from './audio.js';
+import { startCapture, startMicCapture, systemAudioSupport, createAnalyser } from './audio.js';
 
 const canvas = document.getElementById('canvas');
 const hint = document.getElementById('hint');
@@ -13,7 +13,7 @@ const startBtn = document.getElementById('startBtn');
 const nameEl = document.getElementById('name');
 const intensity = document.getElementById('intensity');
 
-const engine = new Engine(canvas, document.getElementById('glcanvas'));
+const engine = new Engine(canvas, document.getElementById('gpucanvas'));
 engine.start();
 
 let vizIndex = 0;
@@ -79,10 +79,16 @@ setInterval(() => {
   }
 }, 500);
 
-startBtn.addEventListener('click', async () => {
+async function startLocal(mode = 'system') {
   setHintError('');
+  // Firefox never delivers audio through the share dialog (a browser
+  // limitation) — explain instead of opening a dialog that cannot work.
+  if (mode === 'system' && systemAudioSupport() === 'unavailable') {
+    setHintError('Firefox can\u2019t capture system audio — use the microphone button, or run Soundwave in a Chromium browser.');
+    return;
+  }
   try {
-    const stream = await startCapture();
+    const stream = mode === 'mic' ? await startMicCapture() : await startCapture();
     const { audioCtx, analyser } = createAnalyser(stream);
     if (ownCtx) ownCtx.close().catch(() => {});
     ownCtx = audioCtx;
@@ -98,7 +104,10 @@ startBtn.addEventListener('click', async () => {
   } catch (err) {
     setHintError((err && err.message) || 'Could not start capture.');
   }
-});
+}
+
+startBtn.addEventListener('click', () => startLocal('system'));
+document.getElementById('micBtn').addEventListener('click', () => startLocal('mic'));
 
 window.addEventListener('message', (e) => {
   const data = e.data;

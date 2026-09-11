@@ -8,7 +8,7 @@
   </head>
   <body>
     <canvas id="canvas" aria-label="Audio visualizer canvas"></canvas>
-    <canvas id="glcanvas" aria-hidden="true"></canvas>
+    <canvas id="gpucanvas" aria-hidden="true"></canvas>
 
     <!-- Start overlay -->
     <div id="overlay" class="overlay">
@@ -18,9 +18,21 @@
         <p class="hint">
           When you click below, pick <em>any screen, window, or tab</em> to share — your
           <em>system audio</em> is captured and analyzed live in your browser. Nothing is recorded
-          or sent anywhere. Works best in Chrome or Edge.
+          or sent anywhere. System audio works in Chromium browsers (Chrome, Edge, Vivaldi);
+          in Firefox, use the microphone button instead.
         </p>
-        <button id="startBtn" class="btn primary" type="button">▶ Start listening</button>
+        <div class="btn-row">
+          <button id="startBtn" class="btn primary" type="button">▶ Start listening</button>
+          <button id="micBtn" class="btn secondary" type="button">🎤 Use microphone</button>
+        </div>
+        <p class="mic-note">The microphone hears whatever is playing out loud — the fallback for browsers
+          that can't capture system audio (Firefox, Safari). Turn your speakers up.</p>
+        <p class="mic-note">
+          Heads up: <b>8 of the 10 visualizers render on your graphics card</b> (WebGPU). Any modern
+          GPU — including integrated graphics — is fine; on old or weak cards the heavy ones
+          (Storm, Smoke, Terrain) may drop below 60&nbsp;fps. Pick a lighter visualizer or lower
+          the window size if that happens.
+        </p>
         <p id="overlayError" class="error" role="alert"></p>
         <p class="shortcuts">
           Press <kbd>?</kbd> for the full list of keyboard shortcuts.

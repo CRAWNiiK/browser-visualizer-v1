@@ -5,6 +5,18 @@
 // recorded or uploaded; it's all local.
 
 /**
+ * Whether this browser can capture system/tab audio via getDisplayMedia.
+ * Chromium browsers (Chrome, Edge, Vivaldi, …) can; Firefox has never
+ * implemented audio in screen shares — its dialog offers no audio checkbox
+ * and the returned stream is always video-only — so opening the share
+ * dialog there is a dead end. There is no feature-detect for this, so a UA
+ * check is the honest option.
+ */
+export function systemAudioSupport(ua = typeof navigator !== 'undefined' ? navigator.userAgent : '') {
+  return /firefox/i.test(ua) ? 'unavailable' : 'available';
+}
+
+/**
  * Ask the user to share a screen/window/tab and return the resulting stream.
  * Throws with a friendly message if no audio track is available.
  */
@@ -24,9 +36,32 @@ export async function startCapture() {
 
   if (!stream.getAudioTracks().length) {
     stream.getTracks().forEach((t) => t.stop());
-    throw new Error('No audio was captured. Pick a screen, window, or tab that is playing sound.');
+    throw new Error(
+      'No audio was shared. Pick a tab or window that is playing sound and enable "Share tab audio" — or use the microphone button instead.',
+    );
   }
   return stream;
+}
+
+/**
+ * Capture the microphone instead — works in every browser, including
+ * Firefox and Safari which cannot capture system audio. The mic hears
+ * whatever is playing out loud through the speakers. Analysis-only: the
+ * stream is never played back, recorded, or sent anywhere.
+ */
+export async function startMicCapture() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    throw new Error('Microphone capture is not supported in this browser.');
+  }
+  // Music-friendly constraints: every default here would fight the signal
+  // (echo cancellation eats bass, AGC rides the volume, NS kills reverb tails).
+  return navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    },
+  });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { spectrumToBins, bandLevel, BeatDetector } from './audio-utils.js';
 import { THEMES, themeColors, hs } from './palette.js';
+import { setGpuCanvas } from './gpu.js';
 
 export const BIN_COUNT = 64;
 
@@ -10,13 +11,13 @@ export const BIN_COUNT = 64;
  * the audio data, timing, and user settings.
  */
 export class Engine {
-  constructor(canvas, glCanvas = null) {
+  constructor(canvas, gpuCanvas = null) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
-    this.glCanvas = glCanvas;
-    this.gl = null;
-    this.isWebGL = false;
-    if (this.glCanvas) this._initGL();
+    this.gpuCanvas = gpuCanvas; // WebGPU target for visualizers with `webgpu: true`
+    this.isGPU = false;
+    this._gpuShown = false;
+    if (gpuCanvas) setGpuCanvas(gpuCanvas); // register with the shared vgpu runtime
     this.analyser = null;
     this.freqData = null;
     this.waveData = null;
@@ -26,6 +27,20 @@ export class Engine {
     this.viz = null;
     this.running = false;
     this.smoothing = 0.6;
+
+    // Pointer trail input for visualizers that paint with it (smoke). Stored
+    // in vgpu effect uv space, where y=0 is the BOTTOM of the canvas and y
+    // grows upward; conversion from DOM coordinates happens per move event.
+    this.pointer = {
+      x: 0.5, // uv, 0..1 left→right
+      y: 0.5, // uv, 0..1 bottom→top
+      vx: 0, // uv/second, smoothed
+      vy: 0,
+      active: false, // true only on frames where the pointer moved
+      _event: null, // latest pointermove payload
+      _hasPos: false, // seen a move since the last (re)entry
+      _moved: false, // a move arrived since the last drawn frame
+    };
 
     this.state = {
       width: 0,
@@ -49,6 +64,7 @@ export class Engine {
       colors: themeColors(THEMES[0]),
       mirror: false,
       flash: false, // safe-flash mode reduces strobe intensity
+      pointer: this.pointer, // pointer trail for visualizers that paint with it
       paused: false,
       fps: 0,
     };
@@ -64,12 +80,76 @@ export class Engine {
     this.running = true;
     this._resize();
     window.addEventListener('resize', this._resize);
+    this._bindPointer();
     requestAnimationFrame((now) => this._frame(now));
   }
 
   stop() {
     this.running = false;
     window.removeEventListener('resize', this._resize);
+    if (this._pointerBound) {
+      for (const el of [this.canvas, this.gpuCanvas]) {
+        if (!el) continue;
+        el.removeEventListener('pointermove', this._onPointerMove);
+        el.removeEventListener('pointerleave', this._onPointerLeave);
+      }
+      this._pointerBound = false;
+    }
+  }
+
+  _bindPointer() {
+    if (this._pointerBound) return;
+    this._pointerBound = true;
+    this._onPointerMove = (e) => {
+      // UI overlays sit above the canvas, so moves over them never reach
+      // here — the trail only paints where the canvas is directly hovered.
+      const rect = e.currentTarget.getBoundingClientRect();
+      this.pointer._event = { x: e.clientX, y: e.clientY, rect };
+      this.pointer._moved = true;
+    };
+    this._onPointerLeave = () => {
+      // Forget the last position so re-entry doesn't fling a splat across
+      // the whole screen.
+      this.pointer._event = null;
+      this.pointer._hasPos = false;
+      this.pointer._moved = false;
+    };
+    for (const el of [this.canvas, this.gpuCanvas]) {
+      if (!el) continue;
+      el.addEventListener('pointermove', this._onPointerMove);
+      el.addEventListener('pointerleave', this._onPointerLeave);
+    }
+  }
+
+  /**
+   * Consume the accumulated pointer events and turn them into per-frame uv
+   * position + smoothed velocity on the shared state. Runs every frame;
+   * `active` is only true when the pointer actually moved since last frame.
+   */
+  _updatePointer(dt) {
+    const p = this.pointer;
+    if (p._moved && p._event) {
+      const { x, y, rect } = p._event;
+      const nx = (x - rect.left) / rect.width;
+      const ny = 1 - (y - rect.top) / rect.height; // uv y points up
+      if (p._hasPos) {
+        const inv = 1 / Math.max(dt, 1 / 240);
+        p.vx += ((nx - p.x) * inv - p.vx) * 0.55;
+        p.vy += ((ny - p.y) * inv - p.vy) * 0.55;
+      } else {
+        p.vx = 0;
+        p.vy = 0;
+      }
+      p.x = nx;
+      p.y = ny;
+      p._hasPos = true;
+      p.active = true;
+      p._moved = false;
+    } else {
+      p.active = false;
+      p.vx = 0;
+      p.vy = 0;
+    }
   }
 
   setAnalyser(analyser) {
@@ -120,10 +200,16 @@ export class Engine {
 
   setVisualizer(create) {
     this.viz = create();
-    this.isWebGL = !!(this.viz && this.viz.webgl);
+    this.isGPU = !!(this.viz && this.viz.webgpu);
+    this._gpuShown = false;
     if (this.viz && typeof this.viz.init === 'function') {
       try {
-        this.viz.init(this.isWebGL ? this.gl : this.state, this.state);
+        // GPU visualizers initialize async (WebGPU device acquisition); a
+        // rejection must never take down the loop. While a GPU visualizer is
+        // not ready yet, the engine draws the theme background + a hint.
+        Promise.resolve(this.viz.init(this.state)).catch((err) => {
+          console.error('Visualizer init failed:', err);
+        });
       } catch (err) {
         // A shader compile error must never take down the whole app.
         console.error('Visualizer init failed:', err);
@@ -132,28 +218,24 @@ export class Engine {
     this._syncCanvasVisibility();
   }
 
-  _initGL() {
-    this.gl = this.glCanvas.getContext('webgl2', { alpha: false, antialias: true });
-  }
-
   _syncCanvasVisibility() {
-    const useGL = this.isWebGL && !!this.gl;
-    if (this.glCanvas) this.glCanvas.style.display = useGL ? 'block' : 'none';
-    if (this.canvas) this.canvas.style.display = useGL ? 'none' : 'block';
+    // The GPU canvas shows as soon as a GPU visualizer is selected — the
+    // vgpu surface needs a visible canvas to size itself — and stays until
+    // init reports it can't get a device; then the 2D canvas carries the
+    // background and the explanatory hint.
+    const useGPU = this.isGPU && !!this.gpuCanvas && !!(this.viz && !this.viz.unsupported);
+    if (this.gpuCanvas) this.gpuCanvas.style.display = useGPU ? 'block' : 'none';
+    if (this.canvas) this.canvas.style.display = useGPU ? 'none' : 'block';
   }
 
   _resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const el = this.isWebGL && this.glCanvas ? this.glCanvas : this.canvas;
-    const w = el.clientWidth || window.innerWidth;
-    const h = el.clientHeight || window.innerHeight;
+    const w = this.canvas.clientWidth || window.innerWidth;
+    const h = this.canvas.clientHeight || window.innerHeight;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (this.glCanvas) {
-      this.glCanvas.width = Math.round(w * dpr);
-      this.glCanvas.height = Math.round(h * dpr);
-    }
+    // The WebGPU canvas is sized by vgpu's surface (dpr clamped to [1, 2]).
     Object.assign(this.state, { width: w, height: h, dpr });
   }
 
@@ -174,6 +256,7 @@ export class Engine {
       this.state.dt = dt;
       this._readAudio();
       this._updateBeat(dt);
+      this._updatePointer(dt);
       this._draw();
     }
 
@@ -253,12 +336,31 @@ export class Engine {
     const hue = s.hueCycle ? s.hue : s.hueShift;
     s.colors = themeColors(s.theme, hue);
 
-    if (this.isWebGL) {
-      if (this.gl) {
-        this.viz.draw(this.gl, s);
+    if (this.isGPU) {
+      // vgpu visualizers render straight into #gpucanvas; they only expose
+      // draw() once async init has completed. Flip canvas visibility the
+      // frame that flips (init resolves or the next visualizer is selected).
+      const gpuReady = !!(this.viz && this.viz.ready && this.gpuCanvas);
+      if (gpuReady !== this._gpuShown) {
+        this._gpuShown = gpuReady;
+        this._syncCanvasVisibility();
+      }
+      if (gpuReady) {
+        this.viz.draw(null, s);
       } else {
         ctx.fillStyle = s.theme.background;
         ctx.fillRect(0, 0, s.width, s.height);
+        if (this.viz && this.viz.unsupported) {
+          // Init couldn't get a WebGPU device: explain why it's dark.
+          ctx.fillStyle = 'rgba(231, 236, 245, 0.85)';
+          ctx.font = '500 15px system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(
+            'This visualizer needs WebGPU — try Chrome, Edge, or the latest Firefox/Safari.',
+            s.width / 2,
+            s.height / 2,
+          );
+        }
       }
       return;
     }

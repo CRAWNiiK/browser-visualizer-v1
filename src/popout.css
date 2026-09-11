@@ -14,7 +14,7 @@ body {
 }
 
 #canvas,
-#glcanvas {
+#gpucanvas {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -22,7 +22,7 @@ body {
   display: block;
 }
 
-#glcanvas {
+#gpucanvas {
   display: none;
 }
 
@@ -115,6 +115,12 @@ body {
 }
 .start-btn:hover {
   filter: brightness(1.08);
+}
+.start-btn--secondary {
+  margin-left: 8px;
+  color: var(--text, #e7ecf5);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
 }
 .hint-error {
   color: #ff6b6b;

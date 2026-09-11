@@ -9,13 +9,14 @@
   </head>
   <body>
     <canvas id="canvas"></canvas>
-    <canvas id="glcanvas" aria-hidden="true"></canvas>
+    <canvas id="gpucanvas" aria-hidden="true"></canvas>
 
     <div id="hint" class="hint">
       <div>
         <p id="hintText">Waiting for audio…</p>
         <p id="hintSub" class="hint-sub">Start sharing audio in the main Soundwave window, or listen here instead:</p>
         <button id="startBtn" class="start-btn" type="button">▶ Start listening here</button>
+        <button id="micBtn" class="start-btn start-btn--secondary" type="button">🎤 Use microphone</button>
         <p id="hintError" class="hint-error"></p>
       </div>
     </div>

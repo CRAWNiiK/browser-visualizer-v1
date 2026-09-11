@@ -25,7 +25,7 @@ body {
 }
 
 #canvas,
-#glcanvas {
+#gpucanvas {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -33,7 +33,7 @@ body {
   display: block;
 }
 
-#glcanvas {
+#gpucanvas {
   display: none;
 }
 
@@ -136,6 +136,27 @@ body {
 }
 .btn.primary:hover {
   box-shadow: 0 10px 40px rgba(34, 211, 238, 0.5);
+}
+
+.btn.secondary {
+  padding: 14px 22px;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.card .mic-note {
+  color: var(--text-dim, rgba(231, 236, 245, 0.55));
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin: 10px auto 0;
+  max-width: 42ch;
 }
 
 /* ---------- Control bar ---------- */

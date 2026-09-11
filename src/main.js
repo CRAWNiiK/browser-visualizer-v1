@@ -1,7 +1,7 @@
 import './styles.css';
 import { Engine } from './engine.js';
 import { VISUALIZERS } from './visualizers/index.js';
-import { startCapture, createAnalyser } from './audio.js';
+import { startCapture, startMicCapture, systemAudioSupport, createAnalyser } from './audio.js';
 import { THEMES, themeColors } from './palette.js';
 import { encode, decode, normalize } from './settings.js';
 import { SCENES } from './scenes.js';
@@ -9,7 +9,7 @@ import { initPopout } from './popout.js';
 
 const $ = (id) => document.getElementById(id);
 
-const engine = new Engine($('canvas'), $('glcanvas'));
+const engine = new Engine($('canvas'), $('gpucanvas'));
 engine.start();
 
 let current = null; // { stream, audioCtx, analyser }
@@ -333,6 +333,21 @@ function generateThumb(scene) {
   }
 
   const viz = VISUALIZERS[scene.visualizer].create();
+
+  if (viz && viz.webgpu) {
+    // GPU visualizers render with WebGPU and can't draw into this 2D
+    // thumbnail canvas — paint a soft theme-colored placeholder glow instead.
+    ctx.fillStyle = theme.background;
+    ctx.fillRect(0, 0, w, h);
+    const grd = ctx.createRadialGradient(w / 2, h * 0.55, 0, w / 2, h * 0.55, w * 0.75);
+    theme.hues.forEach((hue, i) => {
+      grd.addColorStop((i / (theme.hues.length - 1)) * 0.85, `hsla(${(hue + scene.hue) % 360}, ${theme.sat}%, ${theme.light}%, 0.85)`);
+    });
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, w, h);
+    return canvas.toDataURL('image/png');
+  }
+
   if (viz && typeof viz.init === 'function') viz.init(s);
 
   for (let f = 0; f < 24; f++) {
@@ -389,17 +404,25 @@ helpOverlay.addEventListener('click', (e) => {
 const overlay = $('overlay');
 const overlayError = $('overlayError');
 
-async function start() {
+async function start(mode = 'system') {
   overlayError.textContent = '';
+  // Firefox never delivers audio through the share dialog (a browser
+  // limitation) — explain before sending the user through a dialog that
+  // cannot work, and point at the mic option.
+  if (mode === 'system' && systemAudioSupport() === 'unavailable') {
+    overlayError.textContent =
+      'Firefox can\u2019t capture system audio — a browser limitation. Use the microphone button instead (it hears whatever is playing out loud), or open Soundwave in Chrome, Edge, or Vivaldi.';
+    return;
+  }
   try {
-    const stream = await startCapture();
+    const stream = mode === 'mic' ? await startMicCapture() : await startCapture();
     const { audioCtx, analyser } = createAnalyser(stream);
     engine.setAnalyser(analyser);
     // Apply the current smoothing slider to the fresh analyser.
     engine.setSmoothing(0.05 + (Number($('smoothing').value) / 100) * 0.92);
     // The next engine frame forwards audio to the popout via onAudioFrame.
     current = { stream, audioCtx, analyser };
-    // If the user stops sharing via the browser UI, the tracks end.
+    // If the user stops sharing or mutes the mic via the browser UI, the tracks end.
     stream.getTracks().forEach((t) => t.addEventListener('ended', stop));
     overlay.classList.add('hidden');
   } catch (err) {
@@ -418,7 +441,8 @@ function stop() {
   overlay.classList.remove('hidden');
 }
 
-$('startBtn').addEventListener('click', start);
+$('startBtn').addEventListener('click', () => start('system'));
+$('micBtn').addEventListener('click', () => start('mic'));
 $('stopBtn').addEventListener('click', stop);
 
 // ---------- FPS readout ----------

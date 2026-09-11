@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
+import { wgslVitePlugin } from '@vgpu/wgsl/loader-vite';
 
 // Multi-page build: the main app and the separate popout window are both
 // standalone HTML entries.
@@ -7,6 +8,11 @@ export default defineConfig({
   // Relative base so the built assets resolve under any path (local dev
   // serves at /, GitHub Pages serves at /<repo>/).
   base: './',
+  plugins: [
+    // Turns .wgsl files (and their WGSL-to-WGSL import graphs) into JS
+    // modules for the WebGPU visualizers.
+    wgslVitePlugin(),
+  ],
   build: {
     rollupOptions: {
       input: {

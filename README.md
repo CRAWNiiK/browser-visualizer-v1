@@ -1,7 +1,8 @@
 # Soundwave — Audio Visualizer
 
 A realtime audio visualizer that reacts to **whatever audio is playing on your system**.
-Built with Vite + vanilla JS, the Canvas 2D API, and WebGL2. No dependencies beyond the build tooling.
+Built with Vite + vanilla JS, the Canvas 2D API, and WebGPU (via [vgpu](https://vgpu.sh)).
+No dependencies beyond the build tooling, vgpu, and its WGSL loader.
 
 ## How it works
 
@@ -105,25 +106,44 @@ There are no config files to edit — most behavior is set in the UI and saved t
 
 ## Troubleshooting
 
-- **No audio / visuals stay flat** — capturing system audio only works in **Chrome or Edge**.
-  When the share prompt appears, select the specific tab/window that's playing sound and make sure
-  **"Share tab audio"** is checked. Firefox and Safari don't expose system audio to `getDisplayMedia`.
+- **No audio / visuals stay flat** — capturing system audio works in **Chromium browsers**
+  (Chrome, Edge, Vivaldi, …). When the share prompt appears, select the specific tab/window
+  that's playing sound and make sure **"Share tab audio"** (or, for the whole screen on Windows,
+  **"Share system audio"**) is checked.
+- **Firefox can't capture system audio at all** — its share dialog has no audio option (a
+  browser limitation, not a Soundwave bug). Soundwave tells you this up front; use the
+  **🎤 Use microphone** button instead: it visualizes whatever is playing out loud through
+  your speakers, including an external player. The same fallback works in Safari.
 - **Popout window doesn't open** — your browser is blocking popups. Allow popups for the site, or
   trigger it with a click or keypress (which browsers always permit).
 - **Port already in use** — pass a different port (see Configuration above).
 
 ## Features
 
-- **10 visualizers** — Spectrum Bars, Radial Rings, Waveform, Particles, Orb, Shockwave,
-  3D Tunnel, Starfield, The Triangle, Smoke (switch with the picker or keys `1`–`9`, `0`).
-  **The Triangle** and **Smoke** render on the GPU via WebGL2 (a kaleidoscope shader and a
-  fluid simulation, respectively); the other eight use Canvas 2D.
+- **10 visualizers** — Spectrum Bars, Radial Rings, Ridge, Storm, Aurora, Ripples,
+  Terrain, Bloom, Nebula, Smoke (switch with the picker or keys `1`–`9`, `0`).
+  Eight of them render on the GPU via **WebGPU** with [vgpu](https://vgpu.sh):
+  **Ridge** (perspective spectral-history mountains), **Storm** (80k compute-shader
+  particles in a curl-noise flow field), **Aurora** (raymarched volumetric light
+  curtains), **Ripples** (a real wave-equation pond), **Terrain** (a spectrum mountain
+  flyover), **Bloom** (Gray-Scott reaction-diffusion colonies), plus **Nebula**
+  (volumetric noise clouds) and **Smoke** (a full fluid simulation with vorticity
+  confinement and a Jacobi pressure solve). Spectrum Bars and Radial Rings stay on
+  Canvas 2D as calm, readable options. On browsers without WebGPU the GPU ones fall
+  back to a themed placeholder with an explanatory hint.
+- **GPU note** — the GPU visualizers use your graphics card (only ~1.3 MB of VRAM for
+  Storm's particle buffer, but real compute throughput). Any modern GPU including
+  integrated graphics is fine; on old or weak cards the heavy ones (Storm, Smoke,
+  Terrain) may drop below 60 fps — the live FPS readout tells you, and the Canvas 2D
+  visualizers are always there.
 - **Intensity slider** — scales how strongly the visuals react (keys `↑`/`↓`)
 - **Smoothing slider** — tune the analyser's response time
 - **Hue shift slider** + **Hue cycle** toggle for auto-cycling colors (`H`)
 - **6 color themes** — Neon, Sunset, Ocean, Ember, Mono, Aurora
 - **Mirror mode** — kaleidoscope flip (`M`)
 - **Beat detection** — shockwave rings, particle bursts, and flash pulses on the beat
+- **Pointer trail** — move the mouse across the Smoke visualizer to paint dye into the fluid
+  (touch/pen work too; velocity and trail thickness follow your stroke)
 - **Safe flash** toggle to reduce strobe intensity
 - **Pause** (`Space`), **fullscreen** (`F`), and a live **FPS** readout
 - **Keyboard shortcuts** — `1`–`9`, `0` pick a visualizer, `←`/`→` cycle, `↑`/`↓` intensity,
@@ -150,10 +170,14 @@ index.html                 App shell (canvas, overlay, control bar)
 src/
   main.js                  UI wiring + keyboard shortcuts
   engine.js                rAF loop, audio reading, beat detection, mirror/flash
-  audio.js                 System-audio capture + analyser setup
+  gpu.js                   Shared WebGPU runtime (vgpu init + surface, graceful fallback)
+  gpu-backend.js           Shared multi-pass vgpu backend (targets, ping-pong, passes)
+  smoke-sim.js             The smoke fluid sim's pass graph (framework-agnostic, testable)
+  audio.js                 System-audio/mic capture + analyser setup
   audio-utils.js           Pure helpers: FFT binning, band levels, beat detector
   palette.js               Color themes + hue helpers
   visualizers/             One module per visualizer
+    shaders/               WGSL shaders + shared modules for the GPU visualizers
 tests/                     Unit tests (vitest) for the pure logic
 ```
 
@@ -161,4 +185,13 @@ tests/                     Unit tests (vitest) for the pure logic
 
 ```bash
 npm test
+```
+
+Shader sources live in `src/visualizers/shaders/` as `.wgsl` modules (imported at build
+time by the `@vgpu/wgsl` Vite plugin). Vite does **not** validate WGSL, so shader changes
+are checked with vgpu's CLI — it compiles every shader against a real WebGPU device
+(headless Dawn) and reports binding/type errors with exact locations:
+
+```bash
+npx vgpu check src/visualizers/shaders/*.wgsl --require-validation
 ```
